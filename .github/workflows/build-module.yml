@@ -100,78 +100,37 @@ jobs:
           P1="https://downloads.immortalwrt.org"
           P2="mediatek/filogic/immortalwrt-sdk-24.10.5-mediatek-filogic"
           P3="_gcc-13.3.0_musl.Linux-x86_64.tar.xz"
-          
-          echo "Скачиваем SDK: ${P1}${P2}${P3}"
           wget "${P1}${P2}${P3}" -O sdk.tar.xz
-          
           tar -xf sdk.tar.xz
-          # Даем папке простое имя, чтобы скрипт её нашел
-          mv immortalwrt-sdk-* my-sdk
+          mv immortalwrt-sdk-* sdk_dir
           rm sdk.tar.xz
+
       - name: Setup SDK and feeds
         run: |
-          SDK_DIR="my-sdk"
-          cd "$SDK_DIR"
-          
-          # Обновляем фиды (игнорируя ошибки веток)
-          ./scripts/feeds update -a || echo "Фиды с ошибками, но идем дальше"
+          cd sdk_dir
+          ./scripts/feeds update -a || echo "Ignore feeds error"
           ./scripts/feeds install -a
-          
-          # Копируем пакеты из корня твоего репозитория
           cp -r "$GITHUB_WORKSPACE/kmod-amneziawg" package/
           cp -r "$GITHUB_WORKSPACE/amneziawg-tools" package/
           cp -r "$GITHUB_WORKSPACE/luci-proto-amneziawg" package/
-          
-          # Создаем конфиг сборки
           echo "CONFIG_PACKAGE_kmod-amneziawg=m" > .config
           echo "CONFIG_PACKAGE_amneziawg-tools=y" >> .config
           echo "CONFIG_PACKAGE_luci-proto-amneziawg=y" >> .config
-          
           make defconfig
 
       - name: Build AmneziaWG packages
         run: |
-          # Find SDK directory
-          SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
-          cd "$SDK_DIR"
-
-          echo "Building AmneziaWG packages..."
-
-          # Build kmod-amneziawg (kernel module)
-          echo "Building kmod-amneziawg..."
-          make package/kmod-amneziawg/{download,prepare} V=s || true
-          make package/kmod-amneziawg/compile V=s || true
-
-          # Build luci-proto-amneziawg (web interface)
-          echo "Building luci-proto-amneziawg..."
-          make package/luci-proto-amneziawg/{download,prepare} V=s
-          make package/luci-proto-amneziawg/compile V=s
-
-          # Build amneziawg-tools (userspace tools)
-          echo "Building amneziawg-tools..."
-          make package/amneziawg-tools/{download,prepare} V=s
-          make package/amneziawg-tools/compile V=s
-          
-          echo "Build completed. Checking for built packages..."
-          find bin/ -name "*.?pk" | grep -E "(amneziawg|luci-proto-amneziawg|luci-i18n-amneziawg)" | head -10
+          cd sdk_dir
+          export FORCE_UNSAFE_CONFIGURE=1
+          make package/kmod-amneziawg/compile V=s -j$(nproc)
+          make package/amneziawg-tools/compile V=s -j$(nproc)
+          make package/luci-proto-amneziawg/compile V=s -j$(nproc)
 
       - name: Prepare artifacts
         run: |
-          # Find SDK directory
-          SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
-          
           mkdir -p awgrelease
-          postfix="v${{ matrix.build_env.tag }}_${{ matrix.build_env.pkgarch}}_${{ matrix.build_env.target}}_${{ matrix.build_env.subtarget}}"
-          
-          # Copy built packages
-          find "$SDK_DIR/bin/packages" -name "amneziawg-tools*.?pk" -exec sh -c 'file="$1"; postfix="$2"; ext="${file##*.}"; cp "$file" "awgrelease/amneziawg-tools_${postfix}.${ext}"' _ {} "${postfix}" \; || echo "amneziawg-tools package not found"
-          find "$SDK_DIR/bin/packages" -name "luci-proto-amneziawg*.?pk" -exec sh -c 'file="$1"; postfix="$2"; ext="${file##*.}"; cp "$file" "awgrelease/luci-proto-amneziawg_${postfix}.${ext}"' _ {} "${postfix}" \; || echo "luci-proto-amneziawg package not found"
-          find "$SDK_DIR/bin/packages" -name "luci-i18n-amneziawg-ru*.?pk" -exec sh -c 'file="$1"; postfix="$2"; ext="${file##*.}"; cp "$file" "awgrelease/luci-i18n-amneziawg-ru_${postfix}.${ext}"' _ {} "${postfix}" \; || echo "luci-i18n-amneziawg-ru package not found"
-          find "$SDK_DIR/bin/targets" -name "kmod-amneziawg*.?pk" -exec sh -c 'file="$1"; postfix="$2"; ext="${file##*.}"; cp "$file" "awgrelease/kmod-amneziawg_${postfix}.${ext}"' _ {} "${postfix}" \; || echo "kmod-amneziawg package not found"
-          
-          echo "Built packages:"
+          find sdk_dir/bin/ -name "*.?pk" -exec cp {} awgrelease/ \;
           ls -la awgrelease/
-
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
