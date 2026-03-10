@@ -95,34 +95,29 @@ jobs:
           path: openwrt-sdk-*/
           key: ${{ runner.os }}-sdk-${{ env.cache-name }}
 
-      - name: Download and extract OpenWrt SDK
+      - name: Download and extract ImmortalWrt SDK
         if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
-          echo "pkgarch: ${{ matrix.build_env.pkgarch}}, target:${{ matrix.build_env.target}}, subtarget: ${{ matrix.build_env.subtarget}}"
-
-          # Get the actual SDK filename from the directory listing
-          SDK_FILE=$(curl -s "https://downloads.immortalwrt.org/releases/${{ matrix.build_env.tag }}/targets/${{ matrix.build_env.target}}/${{ matrix.build_env.subtarget}}/" | grep -o "openwrt-sdk-${{ matrix.build_env.tag }}-${{ matrix.build_env.target}}-${{ matrix.build_env.subtarget}}_gcc-[^\"]*_musl[^\"]*\.Linux-x86_64\.tar\.[xz|zst]*" | head -n1)
+          # Указываем базовый URL для ImmortalWrt
+          BASE_URL="https://downloads.immortalwrt.org{{ matrix.build_env.tag }}/targets/${{ matrix.build_env.target}}/${{ matrix.build_env.subtarget}}/"
+          
+          # Ищем имя файла SDK на странице (оно отличается от OpenWrt)
+          SDK_FILE=$(curl -s "$BASE_URL" | grep -oE "immortalwrt-sdk-${{ matrix.build_env.tag }}-${{ matrix.build_env.target}}-${{ matrix.build_env.subtarget}}_gcc-[^\"]*_musl[^\"]*\.Linux-x86_64\.tar\.[xz|zst]*" | head -n1)
           
           if [ -z "$SDK_FILE" ]; then
-            echo "SDK file not found for ${{ matrix.build_env.tag }} ${{ matrix.build_env.target}} ${{ matrix.build_env.subtarget}}"
+            echo "SDK не найден на $BASE_URL"
             exit 1
           fi
           
-          SDK_DOWNLOAD_URL="https://downloads.openwrt.org/releases/${{ matrix.build_env.tag }}/targets/${{ matrix.build_env.target}}/${{ matrix.build_env.subtarget}}/${SDK_FILE}"
-          echo "Downloading SDK: $SDK_DOWNLOAD_URL"
+          echo "Скачиваем SDK: ${BASE_URL}${SDK_FILE}"
+          wget "${BASE_URL}${SDK_FILE}"
           
-          wget "$SDK_DOWNLOAD_URL"
-          
-          # Extract based on file extension
+          # Распаковка
           if [[ "$SDK_FILE" == *.tar.zst ]]; then
             tar --zstd -xf "$SDK_FILE"
-          elif [[ "$SDK_FILE" == *.tar.xz ]]; then
-            tar -xf "$SDK_FILE"
           else
-            echo "Unknown archive format: $SDK_FILE"
-            exit 1
+            tar -xf "$SDK_FILE"
           fi
-          
           rm "$SDK_FILE"
 
       - name: Setup SDK and feeds
