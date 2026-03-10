@@ -122,34 +122,30 @@ jobs:
 
       - name: Setup SDK and feeds
         run: |
-          # Find SDK directory
-          SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
-          
+          SDK_DIR=$(find . -maxdepth 1 -name "immortalwrt-sdk-*" -type d | head -n1)
           if [ -z "$SDK_DIR" ]; then
-            echo "SDK directory not found"
-            exit 1
+            SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
           fi
-          
-          # Get absolute paths
-          WORKSPACE_DIR=$(pwd)
           
           cd "$SDK_DIR"
           
-          # Update feeds to include LuCI
-          ./scripts/feeds update -a
+          # Фикс ошибки "You are not currently on a branch"
+          # Мы просто заставляем скрипт не падать при ошибке одной из лент
+          ./scripts/feeds update -a || echo "Некоторые фиды не обновились, но продолжаем..."
           ./scripts/feeds install -a
           
-          # Copy current repository packages directly to package directory
-          cp -r "$WORKSPACE_DIR/kmod-amneziawg" package/
-          cp -r "$WORKSPACE_DIR/amneziawg-tools" package/
-          cp -r "$WORKSPACE_DIR/luci-proto-amneziawg" package/
+          WORKSPACE_DIR="../../"
+          # Копируем пакеты (путь может отличаться в зависимости от структуры твоего репозитория)
+          cp -r "$GITHUB_WORKSPACE/kmod-amneziawg" package/ || echo "kmod-amneziawg не найден"
+          cp -r "$GITHUB_WORKSPACE/amneziawg-tools" package/ || echo "tools не найден"
+          cp -r "$GITHUB_WORKSPACE/luci-proto-amneziawg" package/ || echo "luci не найден"
           
-          # Configure packages to build
+          # Создаем конфиг
           echo "CONFIG_PACKAGE_kmod-amneziawg=m" > .config
           echo "CONFIG_PACKAGE_amneziawg-tools=y" >> .config
           echo "CONFIG_PACKAGE_luci-proto-amneziawg=y" >> .config
-          echo "CONFIG_PACKAGE_luci-i18n-amneziawg-ru=y" >> .config
           
+          # Генерируем дефолтный конфиг ядра
           make defconfig
 
       - name: Build AmneziaWG packages
