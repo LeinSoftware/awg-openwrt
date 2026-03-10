@@ -97,10 +97,14 @@ jobs:
 
       - name: Download and extract ImmortalWrt SDK
         run: |
+          # Внимательно проверь слэши в конце P1 и P2!
           P1="https://downloads.immortalwrt.org"
-          P2="mediatek/filogic/immortalwrt-sdk-24.10.5-mediatek-filogic"
-          P3="_gcc-13.3.0_musl.Linux-x86_64.tar.xz"
+          P2="mediatek/filogic/"
+          P3="immortalwrt-sdk-24.10.5-mediatek-filogic_gcc-13.3.0_musl.Linux-x86_64.tar.xz"
+          
+          echo "Скачиваем SDK по адресу: ${P1}${P2}${P3}"
           wget "${P1}${P2}${P3}" -O sdk.tar.xz
+          
           tar -xf sdk.tar.xz
           mv immortalwrt-sdk-* sdk_dir
           rm sdk.tar.xz
