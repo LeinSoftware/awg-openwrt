@@ -96,56 +96,37 @@ jobs:
           key: ${{ runner.os }}-sdk-${{ env.cache-name }}
 
       - name: Download and extract ImmortalWrt SDK
-        if: steps.cache-sdk.outputs.cache-hit != 'true'
         run: |
-          # Указываем базовый URL для ImmortalWrt
-          BASE_URL="https://downloads.immortalwrt.org{{ matrix.build_env.tag }}/targets/${{ matrix.build_env.target}}/${{ matrix.build_env.subtarget}}/"
+          P1="https://downloads.immortalwrt.org"
+          P2="mediatek/filogic/immortalwrt-sdk-24.10.5-mediatek-filogic"
+          P3="_gcc-13.3.0_musl.Linux-x86_64.tar.xz"
           
-          # Ищем имя файла SDK на странице (оно отличается от OpenWrt)
-          SDK_FILE=$(curl -s "$BASE_URL" | grep -oE "immortalwrt-sdk-${{ matrix.build_env.tag }}-${{ matrix.build_env.target}}-${{ matrix.build_env.subtarget}}_gcc-[^\"]*_musl[^\"]*\.Linux-x86_64\.tar\.[xz|zst]*" | head -n1)
+          echo "Скачиваем SDK: ${P1}${P2}${P3}"
+          wget "${P1}${P2}${P3}" -O sdk.tar.xz
           
-          if [ -z "$SDK_FILE" ]; then
-            echo "SDK не найден на $BASE_URL"
-            exit 1
-          fi
-          
-          echo "Скачиваем SDK: ${BASE_URL}${SDK_FILE}"
-          wget "${BASE_URL}${SDK_FILE}"
-          
-          # Распаковка
-          if [[ "$SDK_FILE" == *.tar.zst ]]; then
-            tar --zstd -xf "$SDK_FILE"
-          else
-            tar -xf "$SDK_FILE"
-          fi
-          rm "$SDK_FILE"
-
+          tar -xf sdk.tar.xz
+          # Даем папке простое имя, чтобы скрипт её нашел
+          mv immortalwrt-sdk-* my-sdk
+          rm sdk.tar.xz
       - name: Setup SDK and feeds
         run: |
-          SDK_DIR=$(find . -maxdepth 1 -name "immortalwrt-sdk-*" -type d | head -n1)
-          if [ -z "$SDK_DIR" ]; then
-            SDK_DIR=$(find . -maxdepth 1 -name "openwrt-sdk-*" -type d | head -n1)
-          fi
-          
+          SDK_DIR="my-sdk"
           cd "$SDK_DIR"
           
-          # Фикс ошибки "You are not currently on a branch"
-          # Мы просто заставляем скрипт не падать при ошибке одной из лент
-          ./scripts/feeds update -a || echo "Некоторые фиды не обновились, но продолжаем..."
+          # Обновляем фиды (игнорируя ошибки веток)
+          ./scripts/feeds update -a || echo "Фиды с ошибками, но идем дальше"
           ./scripts/feeds install -a
           
-          WORKSPACE_DIR="../../"
-          # Копируем пакеты (путь может отличаться в зависимости от структуры твоего репозитория)
-          cp -r "$GITHUB_WORKSPACE/kmod-amneziawg" package/ || echo "kmod-amneziawg не найден"
-          cp -r "$GITHUB_WORKSPACE/amneziawg-tools" package/ || echo "tools не найден"
-          cp -r "$GITHUB_WORKSPACE/luci-proto-amneziawg" package/ || echo "luci не найден"
+          # Копируем пакеты из корня твоего репозитория
+          cp -r "$GITHUB_WORKSPACE/kmod-amneziawg" package/
+          cp -r "$GITHUB_WORKSPACE/amneziawg-tools" package/
+          cp -r "$GITHUB_WORKSPACE/luci-proto-amneziawg" package/
           
-          # Создаем конфиг
+          # Создаем конфиг сборки
           echo "CONFIG_PACKAGE_kmod-amneziawg=m" > .config
           echo "CONFIG_PACKAGE_amneziawg-tools=y" >> .config
           echo "CONFIG_PACKAGE_luci-proto-amneziawg=y" >> .config
           
-          # Генерируем дефолтный конфиг ядра
           make defconfig
 
       - name: Build AmneziaWG packages
